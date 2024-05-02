@@ -1,0 +1,61 @@
+import sys
+import requests
+from bs4 import BeautifulSoup
+
+def get_article_titles(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    article_titles = soup.find_all('h2', class_='card-title')
+    return [title.text.strip() for title in article_titles]
+
+def get_next_api_url(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    button = soup.find('button', class_='btn btn-secondary btn-lg px-5 mb-5')
+    if button:
+        return button.get('hx-get')
+    else:
+        return None
+
+def fetch_content(api_url):
+    response = requests.get(f"https://realpython.com{api_url}")
+    return response.text
+
+def scrape_realpython(url):
+    html = requests.get(url)
+    soup = BeautifulSoup(html.content, 'html.parser')
+
+    button = soup.find('button', class_='btn btn-secondary btn-lg px-5 mb-5')
+    hx_get = button.get('hx-get')
+    hx_target = button.get('hx-target')
+
+    print("Initial API URL:", hx_get)
+
+    api_url = hx_get
+    all_article_titles = []
+
+    while api_url:
+        print("Fetching content from:", api_url)
+        content = fetch_content(api_url)
+        # Extract article titles
+        article_titles = get_article_titles(content)
+        all_article_titles.extend(article_titles)
+        # Get the next API URL
+        api_url = get_next_api_url(content)
+
+    return all_article_titles
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python scraper.py <url> <output_file>")
+        sys.exit(1)
+
+    url = sys.argv[1]
+    output_file = sys.argv[2]
+
+    article_titles = scrape_realpython(url)
+
+    # Write article titles to the specified output file
+    with open(output_file, 'w') as file:
+        for title in article_titles:
+            file.write(title + '\n')
+
+    print("Article titles saved to", output_file)
