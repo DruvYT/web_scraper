@@ -1,0 +1,59 @@
+import asyncio
+import aiohttp
+import uvloop
+import sys
+from bs4 import BeautifulSoup
+
+async def get_article_titles(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    article_titles = soup.find_all('h2', class_='card-title')
+    return [title.text.strip() for title in article_titles]
+
+async def get_next_api_url(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    button = soup.find('button', class_='btn btn-secondary btn-lg px-5 mb-5')
+    if button:
+        return button.get('hx-get')
+    else:
+        return None
+
+async def fetch_content(session, api_url):
+    async with session.get(f"https://realpython.com{api_url}") as response:
+        return await response.text()
+
+async def scrape_realpython(url):
+    async with aiohttp.ClientSession() as session:
+        html_content = await fetch_content(session, url)
+        article_titles = await get_article_titles(html_content)
+        
+        all_article_titles = article_titles
+        next_api_url = await get_next_api_url(html_content)
+        
+        while next_api_url:
+            html_content = await fetch_content(session, next_api_url)
+            article_titles = await get_article_titles(html_content)
+            all_article_titles.extend(article_titles)
+            next_api_url = await get_next_api_url(html_content)
+        
+        return all_article_titles
+
+async def main(url, output_file):
+    article_titles = await scrape_realpython(url)
+    
+    # Write article titles to a text file
+    with open(output_file, 'w') as file:
+        for title in article_titles:
+            file.write(title + '\n')
+
+    print("Article titles saved to", output_file)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python scraper.py <url> <output_file>")
+        sys.exit(1)
+
+    url = sys.argv[1]
+    output_file = sys.argv[2]
+
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    asyncio.run(main(url, output_file))
